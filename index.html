@@ -11,7 +11,7 @@
 
 <body>
     <div id="app">
-        <dropbox-viewer :path="path"></dropbox-viewer>
+        <dropbox-viewer></dropbox-viewer>
     </div>
     <script type="text/x-template" id="dropbox-viewer-template">
         <div>
@@ -31,7 +31,7 @@
             </transition>
             <transition name="fade">
                 <div v-if="!isLoading">
-                    <breadcrumb :p="path"></breadcrumb>
+                    <breadcrumb></breadcrumb>
                     <ul class="icon">
                         <template v-for="entry in structure.folders">
                             <!-- Pass individual folder to folder component -->
@@ -49,6 +49,7 @@
         </div>
     </script>
     <script src="https://unpkg.com/vue"></script>
+    <script src="https://unpkg.com/vuex"></script>
     <script src="https://unpkg.com/dropbox/dist/Dropbox-sdk.min.js"></script>
     <script src="app.js"></script>
 </body>
