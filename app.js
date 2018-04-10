@@ -1,3 +1,28 @@
+const store = new Vuex.Store({
+    state: {
+        path: '',
+        structure: {}
+    },
+    mutations: {
+        updateHash(state) {
+            let hash = window.location.hash.substring(1);
+            state.path = (hash || '');
+        },
+
+        structure(state, payload) {
+            /**
+             * Sample Data:
+             * 
+             *   {
+             *      path: 'images-holidays',
+             *      data: [{...}]
+             *   }
+             */
+            state.structure[payload.path] = payload.data; 
+        }
+    }
+});
+
 Vue.component('breadcrumb', {
     template: '<div>' +
         '<span v-for="(f, i) in folders">' +
@@ -12,7 +37,7 @@ Vue.component('breadcrumb', {
         folders() {
             let output = [];
             slug = '';
-            parts = this.p.split('/');
+            parts = this.$store.state.path.split('/');
 
             for (let item of parts) {
                 slug += item;
@@ -33,7 +58,7 @@ Vue.component('folder', {
 });
 
 Vue.component('file', {
-    template: '<li class="icon-doc-text"><strong>{{ f.name }}</strong><span>- {{ bytesToSize(f.size) }}</span></li>',
+    template: '<li class="icon-doc-text"><strong>{{ f.name }}</strong><span>- {{ bytesToSize(f.size) }}</span> - <a v-if="link" :href="link">Download</a></li>',
     
     props: {
 
@@ -75,9 +100,6 @@ Vue.component('file', {
 
 Vue.component('dropbox-viewer', {
     template: '#dropbox-viewer-template',
-    props: {
-        path: String
-    },
     data() {
         return {
             /** Dropbox access token */
@@ -100,65 +122,101 @@ Vue.component('dropbox-viewer', {
                 accessToken: this.accessToken
             });
         },
-        getFolderStructure(path) {
+
+        createFolderStructure(response) {
+            const structure = {
+                folders: [],
+                files: []
+            }
+
+            for (let entry of response.entries) {
+
+                /** Check ".tag" prop for type */
+                if (entry['.tag'] == 'folder') {
+                    structure.folders.push(entry);
+                } else {
+                    structure.files.push(entry);
+                }
+            }
+
+            this.structure = structure;
+            this.isLoading = false; 
+        },
+
+        createStructureAndSave(response) {
+            this.createFolderStructure(response);
+            this.$store.commit('structure', {
+                path: this.slug,
+                data: response
+            });
+        },
+
+        getFolderStructure() {
             var self = this;
-            this.dropbox().filesListFolder({
-                path: path,
-                include_media_info: true
-            })
-                .then(response => {
 
-                    const structure = {
-                        folders: [],
-                        files: []
-                    }
+            let data = this.$store.state.structure[this.slug];
+            if (data) {
+                this.createFolderStructure(data);
+            } else {
 
-                    for (let entry of response.entries) {
-                        if (entry['.tag'] === 'folder') {
-                            structure.folders.push(entry);
-                        } else {
-                            structure.files.push(entry);
-                        }
-                    }
-
-                    self.structure = structure;
-                    self.isLoading = false;
+                this.dropbox().filesListFolder({
+                    path: this.$store.state.path,
+                    include_media_info: true
                 })
+                .then(this.createStructureAndSave)
                 .catch(error => {
                     console.log(error);
                 });
+            }
         },
-        updateStructure(path) {
+
+        updateStructure() {
             this.isLoading = true;
-            this.getFolderStructure(path);
+            this.getFolderStructure();
         }
     },
+
     created() {
-        this.getFolderStructure(this.path);
+        this.getFolderStructure();
     },
+
+    computed: {
+        path() {
+            return this.$store.state.path;
+        },
+
+        slug() {
+
+            /** Sanitized URL */
+            return this.path.toLowerCase()
+                .replace(/^\/|\/$/g, '')
+                .replace(/ /g,'-')
+                .replace(/\//g,'-')
+                .replace(/[-]+/g, '-')
+                .replace(/[^\w-]+/g,'');    
+        }
+    },
+
     watch: {
         path() {
-            this.updateStructure(this.path);
+            this.updateStructure();
         }
     },
 });
 
 const app = new Vue({
     el: '#app',
-    data: {
-        path: ''
-    },
-    methods: {
-        updateHash() {
-            let hash = window.location.hash.substring(1);
-            this.path = (hash || '');
-        }
-    },
+
+    /** Good practice to associate stor with app, doing so 
+     * also injects the store instance into all child components.
+     */
+    store,  /** Can be accessed using the this.$store variable. */
+
     created() {
-        this.updateHash()
+        store.commit('updateHash');
     }
 });
 
 window.onhashchange = () => {
-    app.updateHash();
+    app.$store.commit('updateHash');
 }
